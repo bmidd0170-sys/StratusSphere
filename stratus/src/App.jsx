@@ -94,23 +94,28 @@ function App() {
             className="forecast-header-btn"
             onClick={() => setShowHourlyForecast(!showHourlyForecast)}
           >
-            <span>📅 Hourly Forecast</span>
+            <span>📅 Weekly Forecast</span>
             <span className="toggle-icon">{showHourlyForecast ? '▼' : '▶'}</span>
           </button>
           
           {showHourlyForecast && (
             <>
-              {/* Day Selection Tabs */}
+              {/* Day Selection Tabs - Show all available days with full weekday names */}
               <div className="day-selector">
-                {weatherData.forecast.forecastday.map((day, idx) => (
-                  <button
-                    key={idx}
-                    className={`day-tab ${selectedDay === idx ? 'active' : ''}`}
-                    onClick={() => setSelectedDay(idx)}
-                  >
-                    {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
-                  </button>
-                ))}
+                {weatherData.forecast.forecastday.map((day, idx) => {
+                  const dayDate = new Date(day.date);
+                  const weekday = dayDate.toLocaleDateString('en-US', { weekday: 'short' });
+                  return (
+                    <button
+                      key={idx}
+                      className={`day-tab ${selectedDay === idx ? 'active' : ''}`}
+                      onClick={() => setSelectedDay(idx)}
+                      title={dayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    >
+                      {weekday}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Hourly Data for Selected Day */}
