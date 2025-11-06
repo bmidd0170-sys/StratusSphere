@@ -104,14 +104,20 @@ export async function sendChatMessage(userMessage, conversationHistory) {
 
     // If a location is found, fetch REAL-TIME weather
     if (city) {
-      const realWeather = await fetchRealTimeWeather(city);
-      if (realWeather) {
-        weatherContext = `
+      try {
+        const realWeather = await getWeatherByCity(city);
+        if (realWeather) {
+          weatherContext = `
 [REAL-TIME WEATHER DATA for ${realWeather.location.name}, ${realWeather.location.country}]
-Current: ${realWeather.current.temp_c}°C, ${realWeather.current.condition}
+Current: ${Math.round(realWeather.current.temp_c)}°C, ${realWeather.current.condition.text}
 Humidity: ${realWeather.current.humidity}%
-Wind: ${realWeather.current.wind_kph} kph
+Wind: ${Math.round(realWeather.current.wind_kph)} kph
+Feels like: ${Math.round(realWeather.current.feelslike_c)}°C
 `;
+        }
+      } catch (weatherError) {
+        console.warn("Could not fetch real-time weather:", weatherError);
+        // Continue without real-time data
       }
     }
 
@@ -127,7 +133,7 @@ Wind: ${realWeather.current.wind_kph} kph
         messages: [
           {
             role: "system",
-            content: `You are Storm, a helpful weather assistant. ${weatherContext ? "You have been provided with REAL-TIME weather data below. Use this accurate data in your response." : "Provide helpful weather information based on typical patterns."} Be conversational, friendly, and accurate.`,
+            content: `You are Storm, a helpful weather assistant. ${weatherContext ? "You have been provided with REAL-TIME weather data below. Use this accurate data in your response." : "Provide helpful weather information based on typical patterns."} Be conversational, friendly, and accurate.${weatherContext ? "\n" + weatherContext : ""}`,
           },
           ...conversationHistory,
           { role: "user", content: userMessage },
