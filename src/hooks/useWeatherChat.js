@@ -10,41 +10,51 @@ import React from 'react';
  */
 async function fetchRealTimeWeather(city) {
   try {
+    console.log(`Starting weather fetch for: "${city}"`);
+    
     // Geocode the city to get coordinates
-    const geoResponse = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
-    );
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=5&language=en&format=json`;
+    console.log(`Geocoding URL: ${geoUrl}`);
+    
+    const geoResponse = await fetch(geoUrl);
     const geoData = await geoResponse.json();
 
+    console.log(`Geocoding results:`, geoData);
+
     if (!geoData.results || geoData.results.length === 0) {
-      console.warn(`City not found: ${city}`);
+      console.warn(`❌ City not found: ${city}`);
       return null;
     }
 
-    const { latitude, longitude, name, country, admin1 } = geoData.results[0];
-    console.log(`Found: ${name}, ${admin1}, ${country} (${latitude}, ${longitude})`);
+    // Use the first result (most relevant)
+    const location = geoData.results[0];
+    const { latitude, longitude, name, country, admin1, admin2 } = location;
+    
+    console.log(`✅ Found: ${name}, ${admin1 || admin2 || ""} ${country} (${latitude}, ${longitude})`);
 
     // Fetch real-time weather for the coordinates
-    const weatherResponse = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&forecast_days=7&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`
-    );
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day&forecast_days=7&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
+    
+    console.log(`Weather URL: ${weatherUrl}`);
+    
+    const weatherResponse = await fetch(weatherUrl);
 
     if (!weatherResponse.ok) {
-      console.warn("Open-Meteo API error");
+      console.warn(`❌ Open-Meteo API error: ${weatherResponse.status}`);
       return null;
     }
 
     const weatherData = await weatherResponse.json();
-    console.log("Real-time weather data:", weatherData);
+    console.log(`✅ Real-time weather data:`, weatherData);
 
     return {
-      location: { name, region: admin1, country, latitude, longitude },
+      location: { name, region: admin1 || admin2, country, latitude, longitude },
       current: {
         temp_c: weatherData.current.temperature_2m,
         temp_f: Math.round(weatherData.current.temperature_2m * 9/5 + 32),
         humidity: weatherData.current.relative_humidity_2m,
-        wind_kph: weatherData.current.wind_speed_10m,
-        feelslike_c: weatherData.current.temperature_2m - 1,
+        wind_kph: Math.round(weatherData.current.wind_speed_10m * 100) / 100,
+        feelslike_c: Math.round(weatherData.current.temperature_2m - (weatherData.current.wind_speed_10m / 10)),
         condition: {
           text: getWeatherCondition(weatherData.current.weather_code),
           icon: "//cdn.weatherapi.com/weather/128x128/day/302.png",
@@ -75,7 +85,7 @@ async function fetchRealTimeWeather(city) {
       },
     };
   } catch (error) {
-    console.error("Error fetching real-time weather:", error);
+    console.error(`❌ Error fetching real-time weather:`, error);
     return null;
   }
 }
@@ -189,59 +199,46 @@ Feels like: ${Math.round(realWeather.current.feelslike_c)}°C
  * Extract city/location name from user message (supports city names and ZIP codes)
  */
 function extractCityName(message) {
-  // Clean message
   const msg = message.toLowerCase();
-
-  // Common weather-related keywords
   const weatherKeywords = ['weather', 'climate', 'forecast', 'temperature', 'conditions', 'rain', 'snow', 'hot', 'cold', 'is it', 'what', 'how'];
 
-  // Strategy 0: Check for ZIP codes (5 digits)
+  // Strategy 0: Check for 5-digit ZIP codes
   const zipMatch = message.match(/\b(\d{5})\b/);
   if (zipMatch) {
-    console.log(`Detected ZIP code: ${zipMatch[1]}`);
+    console.log(`🔍 Detected ZIP code: ${zipMatch[1]}`);
     return zipMatch[1];
   }
 
   // Strategy 1: Direct patterns like "weather in [City]", "weather for [City]"
   const directPatterns = [
     /(?:weather|forecast|climate|conditions?)\s+(?:in|for|at|near)\s+([A-Za-z\s]+?)(?:\s+(?:weather|forecast|climate|now|today|today's|is|has|\?|\.)|$)/i,
-    /in\s+([A-ZaZ]+(?:\s+[A-ZaZ]+)?)\s+(?:weather|forecast|climate|conditions?)/i,
-    /(?:weather|forecast|climate)\s+for\s+([A-ZaZ]+(?:\s+[A-Za-z]+)?)/i,
+    /in\s+([A-Za-z\s]+?)\s+(?:weather|forecast|climate|conditions?)/i,
+    /(?:weather|forecast|climate)\s+(?:in|for)\s+([A-Za-z\s]+?)[\?\.]?$/i,
   ];
 
-  for (const pattern of directPatterns) {
-    const match = message.match(pattern);
-    if (match && match[1]) {
-      const city = match[1].trim();
-      // Validate it's a real city (has letters, not too short, not a keyword)
-      if (city.length > 2 && !weatherKeywords.includes(city.toLowerCase())) {
-        return city.split(/,\s*/)[0]; // Take first part if comma-separated
+    for (const pattern of directPatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        const city = match[1].trim();
+        if (city.length > 1 && !weatherKeywords.includes(city)) {
+          console.log(`🔍 Extracted city (direct pattern): ${city}`);
+          return city;
+        }
       }
     }
-  }
-
-  // Strategy 2: Look for capitalized words (proper nouns) not at start of message
-  const capitalizedWords = message.match(/(?:in|for|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g);
-  if (capitalizedWords && capitalizedWords.length > 0) {
-    const lastCapitalized = capitalizedWords[capitalizedWords.length - 1];
-    const city = lastCapitalized.replace(/^(?:in|for|at|near)\s+/, '').trim();
-    if (city.length > 2 && !weatherKeywords.includes(city.toLowerCase())) {
-      return city;
+  
+    // Strategy 2: Capitalized words (likely city names)
+    const words = message.split(/\s+/);
+    for (const word of words) {
+      if (word.match(/^[A-Z][a-z]+$/) && !weatherKeywords.includes(word.toLowerCase())) {
+        console.log(`🔍 Extracted city (capitalized word): ${word}`);
+        return word;
+      }
     }
+  
+    console.log(`❌ No city found in message`);
+    return null;
   }
-
-  // Strategy 3: Extract city from end of question (common pattern: "How's the weather in [City]?")
-  const endPattern = /(?:in|for|at)\s+([A-Za-z\s]+?)[\?\.]?$/i;
-  const endMatch = message.match(endPattern);
-  if (endMatch && endMatch[1]) {
-    const city = endMatch[1].trim();
-    if (city.length > 2 && !weatherKeywords.includes(city.toLowerCase())) {
-      return city.split(/,\s*/)[0];
-    }
-  }
-
-  return null;
-}
 
 /**
  * Fetch real-time weather data for a city
