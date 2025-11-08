@@ -197,13 +197,34 @@ Feels like: ${Math.round(realWeather.current.feelslike_c)}°C
         messages: [
           {
             role: "system",
-            content: `You are Storm, a helpful and friendly weather assistant. ${weatherContext ? "You have been provided with REAL-TIME weather data. Use this accurate current data in your response." : "Provide helpful weather information based on typical climate patterns."} Be conversational, accurate, and engaging. If you have real-time data, reference it specifically.${weatherContext ? "\n" + weatherContext : ""}`,
+            content: `You are Storm, a personal weather and activity assistant chatbot! 🌤️ You help users plan their day based on weather conditions by:
+
+🗓️ **Building personalized schedules** - Create detailed daily plans based on weather and user preferences
+👔 **Recommending outfits** - Suggest appropriate clothing for the weather conditions
+🎯 **Activity suggestions** - Recommend indoor/outdoor activities based on weather
+📍 **Location-specific advice** - Provide hyper-local recommendations
+
+${weatherContext ? "You have REAL-TIME weather data. Use this accurate current data in your responses." : "Use typical weather patterns for your area."}
+
+**Response Format:**
+- Use emojis to make responses engaging (🌟, ⛅, 🧥, 🏃‍♂️, etc.)
+- Structure responses with clear sections when building schedules
+- Be conversational and friendly
+- Ask follow-up questions to personalize recommendations
+- Include specific times for activities when building schedules
+
+**Example interactions:**
+- "Plan my day" → Create a full schedule with activities
+- "What should I wear?" → Outfit recommendations with reasons
+- "Activities for today?" → Weather-appropriate activity suggestions
+
+${weatherContext ? "\n" + weatherContext : ""}`,
           },
           ...conversationHistory,
           { role: "user", content: userMessage },
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: 0.8,
+        max_tokens: 600,
       }),
     });
 
@@ -230,6 +251,57 @@ function extractCityName(message) {
   
   // Clean message
   const msg = message.toLowerCase();
+
+  // Common city slang/nicknames mapping to full names
+  const citySlangMap = {
+    'philly': 'Philadelphia',
+    'phili': 'Philadelphia',
+    'ny': 'New York',
+    'nyc': 'New York',
+    'la': 'Los Angeles',
+    'sf': 'San Francisco',
+    'frisco': 'San Francisco',
+    'dc': 'Washington',
+    'chi': 'Chicago',
+    'chi-town': 'Chicago',
+    'atl': 'Atlanta',
+    'bos': 'Boston',
+    'dfw': 'Dallas',
+    'dtw': 'Detroit',
+    'mia': 'Miami',
+    'sea': 'Seattle',
+    'pdx': 'Portland',
+    'Vegas': 'Las Vegas',
+    'vegas': 'Las Vegas',
+    'sin city': 'Las Vegas',
+    'la': 'Los Angeles',
+    'sd': 'San Diego',
+    'mke': 'Milwaukee',
+    'phl': 'Philadelphia',
+    'hou': 'Houston',
+    'aus': 'Austin',
+    'den': 'Denver',
+    'phoenix': 'Phoenix',
+    'phoenix': 'Phoenix',
+    'phx': 'Phoenix',
+    'mpls': 'Minneapolis',
+    'stl': 'Saint Louis',
+    'nola': 'New Orleans',
+    'big apple': 'New York',
+    'windy city': 'Chicago',
+    'city of angels': 'Los Angeles',
+    'bean town': 'Boston',
+    'music city': 'Nashville',
+    'ptown': 'Portland',
+  };
+
+  // Check for slang first
+  for (const [slang, fullName] of Object.entries(citySlangMap)) {
+    if (msg.includes(slang.toLowerCase())) {
+      console.log(`Detected city slang: "${slang}" → "${fullName}"`);
+      return fullName;
+    }
+  }
 
   // Common weather-related keywords to avoid
   const weatherKeywords = ['weather', 'climate', 'forecast', 'temperature', 'conditions', 'rain', 'snow', 'hot', 'cold', 'is', 'it', 'what', 'how', 'the', 'today', 'tomorrow', 'now'];
@@ -375,13 +447,34 @@ Feels like: ${Math.round(realWeather.current.feelslike_c)}°C
         messages: [
           {
             role: "system",
-            content: `You are Storm, a helpful and friendly weather assistant. ${weatherContext ? "You have been provided with REAL-TIME weather data. Use this accurate current data in your response." : "Provide helpful weather information based on typical climate patterns."} Be conversational, accurate, and engaging. If you have real-time data, reference it specifically.${weatherContext ? "\n" + weatherContext : ""}`,
+            content: `You are Storm, a personal weather and activity assistant chatbot! 🌤️ You help users plan their day based on weather conditions by:
+
+🗓️ **Building personalized schedules** - Create detailed daily plans based on weather and user preferences
+👔 **Recommending outfits** - Suggest appropriate clothing for the weather conditions
+🎯 **Activity suggestions** - Recommend indoor/outdoor activities based on weather
+📍 **Location-specific advice** - Provide hyper-local recommendations
+
+${weatherContext ? "You have REAL-TIME weather data. Use this accurate current data in your responses." : "Use typical weather patterns for your area."}
+
+**Response Format:**
+- Use emojis to make responses engaging (🌟, ⛅, 🧥, 🏃‍♂️, etc.)
+- Structure responses with clear sections when building schedules
+- Be conversational and friendly
+- Ask follow-up questions to personalize recommendations
+- Include specific times for activities when building schedules
+
+**Example interactions:**
+- "Plan my day" → Create a full schedule with activities
+- "What should I wear?" → Outfit recommendations with reasons
+- "Activities for today?" → Weather-appropriate activity suggestions
+
+${weatherContext ? "\n" + weatherContext : ""}`,
           },
           ...conversationHistory,
           { role: "user", content: userMessage },
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: 0.8,
+        max_tokens: 600,
       }),
     });
 
