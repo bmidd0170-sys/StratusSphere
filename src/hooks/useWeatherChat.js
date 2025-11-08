@@ -2,145 +2,125 @@ import React from 'react';
 
 /**
  * Utility to handle OpenAI chat integration for weather queries
- * OpenAI provides context, real-time weather API provides live data
+ * WeatherAPI.com provides real-time weather data and forecasts
+ * ChatGPT handles outfit suggestions, activity recommendations, and scheduling
  */
 
 /**
- * Fetch REAL-TIME weather data using Open-Meteo (free, no API key needed)
+ * Fetch REAL-TIME weather data and forecast using WeatherAPI.com
+ * Free tier: 1 million API calls/month, 10-day forecast, hourly data
  */
-async function fetchRealTimeWeather(city) {
+async function fetchWeatherFromWeatherAPI(city) {
   try {
-    // Geocode the city to get coordinates
-    const geoResponse = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
+    const apiKey = import.meta.env.VITE_WEATHERAPI_KEY;
+    
+    if (!apiKey) {
+      throw new Error(
+        'VITE_WEATHERAPI_KEY is not configured. Please add it to your .env.local file. ' +
+        'Get a free key at https://www.weatherapi.com/'
+      );
+    }
+
+    // Call WeatherAPI.com forecast endpoint
+    // days=10 for 10-day forecast, aqi=yes for air quality index
+    const response = await fetch(
+      `https://api.weatherapi.com/v1/forecast.json?` +
+      `key=${apiKey}&` +
+      `q=${encodeURIComponent(city)}&` +
+      `days=10&` +
+      `aqi=yes&` +
+      `alerts=yes`
     );
-    const geoData = await geoResponse.json();
 
-    if (!geoData.results || geoData.results.length === 0) {
-      console.warn(`City not found: ${city}`);
-      return null;
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(
+          'WeatherAPI.com API key is invalid. Please verify your VITE_WEATHERAPI_KEY in .env.local'
+        );
+      } else if (response.status === 400) {
+        const errorData = await response.json();
+        throw new Error(`City not found: ${errorData.error?.message || city}`);
+      }
+      throw new Error(`WeatherAPI.com error: ${response.statusText}`);
     }
 
-    const { latitude, longitude, name, country, admin1 } = geoData.results[0];
-    console.log(`Found: ${name}, ${admin1}, ${country} (${latitude}, ${longitude})`);
+    const weatherData = await response.json();
+    console.log("WeatherAPI.com data received:", weatherData);
 
-    // Fetch real-time weather for the coordinates with more detailed hourly data
-    const weatherResponse = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&forecast_days=7&hourly=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&timeformat=iso8601`
+    // Validate we have the expected data structure
+    if (!weatherData.location || !weatherData.current || !weatherData.forecast) {
+      throw new Error("Invalid weather data structure from WeatherAPI.com");
+    }
+
+    console.log(
+      `Processing weather for ${weatherData.location.name}: ` +
+      `Current: ${weatherData.current.temp_c}°C, ` +
+      `Forecast: ${weatherData.forecast.forecastday.length} days`
     );
 
-    if (!weatherResponse.ok) {
-      console.warn("Open-Meteo API error");
-      return null;
-    }
-
-    const weatherData = await weatherResponse.json();
-    console.log("Real-time weather data:", weatherData);
-    console.log("Hourly times sample:", weatherData.hourly.time.slice(0, 5));
-    console.log("Daily times:", weatherData.daily.time);
-
-    // Validate that we have the expected data structure
-    if (!weatherData.hourly || !weatherData.hourly.time || !weatherData.daily || !weatherData.daily.time) {
-      console.error("Invalid weather data structure:", weatherData);
-      return null;
-    }
-
-    console.log(`Processing weather data for ${name}: ${weatherData.hourly.time.length} hourly points, ${weatherData.daily.time.length} daily points`);
-
+    // Transform WeatherAPI.com response to our standard format
     return {
-      location: { name, region: admin1, country, latitude, longitude },
+      location: {
+        name: weatherData.location.name,
+        region: weatherData.location.region,
+        country: weatherData.location.country,
+        latitude: weatherData.location.lat,
+        longitude: weatherData.location.lon,
+        timezone: weatherData.location.tz_id,
+      },
       current: {
-        temp_c: weatherData.current.temperature_2m,
-        temp_f: Math.round(weatherData.current.temperature_2m * 9/5 + 32),
-        humidity: weatherData.current.relative_humidity_2m,
-        wind_kph: weatherData.current.wind_speed_10m,
-        feelslike_c: weatherData.current.temperature_2m - 1,
+        temp_c: weatherData.current.temp_c,
+        temp_f: weatherData.current.temp_f,
+        humidity: weatherData.current.humidity,
+        wind_kph: weatherData.current.wind_kph,
+        feelslike_c: weatherData.current.feelslike_c,
+        feelslike_f: weatherData.current.feelslike_f,
         condition: {
-          text: getWeatherCondition(weatherData.current.weather_code),
-          icon: "//cdn.weatherapi.com/weather/128x128/day/302.png",
+          text: weatherData.current.condition.text,
+          icon: weatherData.current.condition.icon,
         },
+        aqi: weatherData.current.air_quality ? {
+          us_epa_index: weatherData.current.air_quality['us-epa-index'],
+          gb_defra_index: weatherData.current.air_quality['gb-defra-index'],
+        } : null,
       },
       forecast: {
-        forecastday: weatherData.daily.time.map((date, idx) => {
-          // Get all hourly data for this specific date
-          const dailyHourlyData = [];
-          
-          for (let hourIdx = 0; hourIdx < weatherData.hourly.time.length; hourIdx++) {
-            const hourlyTime = weatherData.hourly.time[hourIdx];
-            const hourlyDate = hourlyTime.split('T')[0]; // Extract YYYY-MM-DD
-            
-            if (hourlyDate === date) {
-              dailyHourlyData.push({
-                time: hourlyTime,
-                temp_c: weatherData.hourly.temperature_2m[hourIdx],
-                humidity: weatherData.hourly.relative_humidity_2m ? weatherData.hourly.relative_humidity_2m[hourIdx] : null,
-                wind_kph: weatherData.hourly.wind_speed_10m ? weatherData.hourly.wind_speed_10m[hourIdx] : null,
-                condition: {
-                  text: getWeatherCondition(weatherData.hourly.weather_code[hourIdx]),
-                  icon: "//cdn.weatherapi.com/weather/128x128/day/302.png",
-                },
-              });
-            }
-          }
-          
-          console.log(`Day ${idx} (${date}): ${dailyHourlyData.length} hourly points`);
-          if (dailyHourlyData.length > 0) {
-            console.log(`  First hour: ${dailyHourlyData[0].time}, ${dailyHourlyData[0].temp_c}°C, ${dailyHourlyData[0].condition.text}`);
-            console.log(`  Last hour: ${dailyHourlyData[dailyHourlyData.length-1].time}, ${dailyHourlyData[dailyHourlyData.length-1].temp_c}°C, ${dailyHourlyData[dailyHourlyData.length-1].condition.text}`);
-          }
-
-          return {
-            date,
-            day: {
-              maxtemp_c: weatherData.daily.temperature_2m_max[idx],
-              mintemp_c: weatherData.daily.temperature_2m_min[idx],
-              condition: {
-                text: getWeatherCondition(weatherData.daily.weather_code[idx]),
-                icon: "//cdn.weatherapi.com/weather/128x128/day/302.png",
-              },
+        forecastday: weatherData.forecast.forecastday.map((day, idx) => ({
+          date: day.date,
+          day: {
+            maxtemp_c: day.day.maxtemp_c,
+            mintemp_c: day.day.mintemp_c,
+            avgtemp_c: day.day.avgtemp_c,
+            avghumidity: day.day.avghumidity,
+            condition: {
+              text: day.day.condition.text,
+              icon: day.day.condition.icon,
             },
-            hour: dailyHourlyData,
-          };
-        }),
+            daily_chance_of_rain: day.day.daily_chance_of_rain,
+            daily_chance_of_snow: day.day.daily_chance_of_snow,
+          },
+          // Hourly data for each day
+          hour: day.hour.map((hour) => ({
+            time: hour.time,
+            temp_c: hour.temp_c,
+            temp_f: hour.temp_f,
+            humidity: hour.humidity,
+            wind_kph: hour.wind_kph,
+            condition: {
+              text: hour.condition.text,
+              icon: hour.condition.icon,
+            },
+            chance_of_rain: hour.chance_of_rain,
+            chance_of_snow: hour.chance_of_snow,
+          })),
+        })),
       },
+      alerts: weatherData.alerts?.alert || [],
     };
   } catch (error) {
-    console.error("Error fetching real-time weather:", error);
+    console.error("Error fetching weather from WeatherAPI.com:", error);
     return null;
   }
-}
-
-/**
- * Convert WMO weather code to readable condition
- */
-function getWeatherCondition(code) {
-  const conditions = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    71: "Slight snow",
-    73: "Moderate snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Slight rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Slight snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with slight hail",
-    99: "Thunderstorm with heavy hail",
-  };
-  return conditions[code] || "Unknown";
 }
 
 /**
@@ -390,8 +370,8 @@ export async function getWeatherForCity(city) {
   }
 
   try {
-    console.log(`Fetching weather for: "${city}"`);
-    const weather = await fetchRealTimeWeather(city);
+    console.log(`Fetching weather for: "${city}" using WeatherAPI.com`);
+    const weather = await fetchWeatherFromWeatherAPI(city);
     return weather;
   } catch (error) {
     console.warn(`Could not fetch weather data for "${city}":`, error);
@@ -415,11 +395,11 @@ export async function sendChatMessageWithCity(userMessage, conversationHistory, 
     console.log(`Using city: "${city}" (override: ${!!overrideCity})`);
     let weatherContext = "";
 
-    // If a location is found, fetch REAL-TIME weather
+    // If a location is found, fetch REAL-TIME weather from WeatherAPI.com
     if (city) {
       try {
         console.log(`Fetching real-time weather for: ${city}`);
-        const realWeather = await fetchRealTimeWeather(city);
+        const realWeather = await fetchWeatherFromWeatherAPI(city);
         if (realWeather) {
           console.log(`Successfully fetched weather for: ${realWeather.location.name}`);
           weatherContext = `
