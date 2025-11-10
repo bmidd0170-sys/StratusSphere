@@ -243,19 +243,25 @@ Respond EXACTLY in this format:
 WEATHER: [2-sentence weather info]
 OUTFIT: [2-sentence outfit suggestions]`;
 
-				try {
-					// Call AI to generate weather and outfit
-					const response = await sendChatMessageWithCity(prompt, []);
-					console.log(`[Schedule Auto-Gen ${i}] Response:`, response);
+			try {
+				// Call AI to generate weather and outfit
+				const response = await sendChatMessageWithCity(prompt, []);
+				console.log(`[Schedule Auto-Gen ${i}] Response:`, response);
 
-					// Parse weather and outfit from response
-					let weather = "";
-					let outfit = "";
+				// Parse weather and outfit from response
+				let weather = "";
+				let outfit = "";
 
-					const weatherMatch = response.match(/WEATHER:\s*(.+?)(?=OUTFIT:|$)/s);
-					const outfitMatch = response.match(/OUTFIT:\s*(.+?)$/s);
+				// Convert response to string (handle both string and object responses)
+				const responseText = typeof response === 'string' ? response : (response?.content || response?.message || '');
+				if (!responseText) {
+					console.warn(`[Schedule Auto-Gen ${i}] Empty response received`);
+					enrichedItems.push(item);
+					continue;
+				}
 
-					if (weatherMatch) {
+				const weatherMatch = responseText.match(/WEATHER:\s*(.+?)(?=OUTFIT:|$)/s);
+				const outfitMatch = responseText.match(/OUTFIT:\s*(.+?)$/s);					if (weatherMatch) {
 						weather = weatherMatch[1].trim();
 					}
 					if (outfitMatch) {
