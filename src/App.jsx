@@ -1,77 +1,61 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import "./styles/App.css";
 import SearchBar from "./components/SearchBar";
 import WeatherCard from "./components/WeatherCard";
+import ChatBox from "./components/ChatBox";
 import ChatBubble from "./components/ChatBubble";
 import HourlyLineChart from "./components/HourlyLineChart";
-import About from "./components/About";
 import ScheduleTable from "./components/ScheduleTable";
 import Settings from "./components/Settings";
+import About from "./components/About";
 import { TemperatureProvider } from "./context/TemperatureContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import {
 	sendChatMessage,
-	getWeatherForCity,
 	sendChatMessageWithCity,
+	getWeatherForCity,
 } from "./hooks/useWeatherChat";
+
+// Helper function to find current day index in forecast
+function findCurrentDayIndex(forecastDays) {
+	const today = new Date().toISOString().split("T")[0];
+	return forecastDays.findIndex((day) => day.date === today) || 0;
+}
 
 function App() {
 	const [weatherData, setWeatherData] = useState(null);
-	const [messages, setMessages] = useState([]);
+	const [messages, setMessages] = useState([
+		{
+			role: "assistant",
+			content:
+				"Hi! Ask me about the weather in any location, climate information, or anything else!",
+		},
+	]);
 	const [isLoading, setIsLoading] = useState(false);
-	const [showChatBubble, setShowChatBubble] = useState(false);
+	const [showChat, setShowChat] = useState(true);
 	const [showDetails, setShowDetails] = useState(false);
-	const [showAbout, setShowAbout] = useState(true);
-	const [showSettings, setShowSettings] = useState(false);
-	const [showScheduleTable, setShowScheduleTable] = useState(false);
-	const [scheduleData, setScheduleData] = useState(null);
-	const [outfitImages, setOutfitImages] = useState({}); // Maps rowIndex to image URL
-	const [hasVisitedMain, setHasVisitedMain] = useState(false);
-
-	// Check if user has already been welcomed
-	useEffect(() => {
-		const hasBeenWelcomed = localStorage.getItem("stratussphere_welcomed");
-		if (hasBeenWelcomed) {
-			setShowAbout(false);
-			setHasVisitedMain(true);
-		}
-	}, []);
-
+	const [showMoreHourly, setShowMoreHourly] = useState(false);
 	const [showHourlyForecast, setShowHourlyForecast] = useState(false);
-	const [selectedDay, setSelectedDay] = useState(null); // Will be set to current day index
-
-	// Auto-show and scroll to forecast when weather data is loaded
-	useEffect(() => {
-		if (weatherData && weatherData.forecast) {
-			setShowHourlyForecast(true);
-			// Scroll to forecast section
-			setTimeout(() => {
-				const forecastSection = document.querySelector(".hourly-forecast");
-				if (forecastSection) {
-					forecastSection.scrollIntoView({
-						behavior: "smooth",
-						block: "start",
-					});
-				}
-			}, 100);
-		}
-	}, [weatherData]);
-
-	// Helper function to find current day index and set default selection
-	const findCurrentDayIndex = (forecastDays) => {
-		const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
-		const currentDayIndex = forecastDays.findIndex((day) => day.date === today);
-		return currentDayIndex >= 0 ? currentDayIndex : 0; // Default to first day if today not found
-	};
-
-	// Helper function to get weekday name
-	const getDayLabel = (dayDate, index, currentDayIndex) => {
-		const dayDateObj = new Date(dayDate);
-		// Always return the full weekday name
-		return dayDateObj.toLocaleDateString("en-US", { weekday: "long" });
-	};
+	const [selectedDay, setSelectedDay] = useState(0); // 0 = today, 1 = tomorrow, 2 = day after
+	const [showSettings, setShowSettings] = useState(false);
+	const [showChatBubble, setShowChatBubble] = useState(false);
+	const [showAbout, setShowAbout] = useState(false);
+	const [hasVisitedMain, setHasVisitedMain] = useState(false);
+	const [scheduleData, setScheduleData] = useState(null);
+	const [showScheduleTable, setShowScheduleTable] = useState(false);
+	const [outfitImages, setOutfitImages] = useState({});
 
 	const handleSendMessage = async (userMessage) => {
+		console.log("handleSendMessage called with:", userMessage);
+		console.log("Setting showChatBubble to true");
+
+		// Just show chatbot if empty message (button clicked but no text entered)
+		if (!userMessage.trim()) {
+			setShowChatBubble(true);
+			console.log("Empty message - just showing chatbot");
+			return;
+		}
+
 		// Add user message to chat
 		setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 		setIsLoading(true);
@@ -229,91 +213,15 @@ function App() {
 	// Auto-generate weather and outfit when schedule is first created
 	const handleScheduleDetected = async (scheduleItems, title) => {
 		try {
-			setIsLoading(true);
-			const enrichedItems = [];
-			const newOutfitImages = {};
-
-			// Loop through each schedule item and generate weather/outfit
-			for (let i = 0; i < scheduleItems.length; i++) {
-				const item = scheduleItems[i];
-				const prompt = `You are Storm, a weather and activity assistant. For a schedule entry at ${item.time} with activity: "${item.activity}", generate SHORT and CONCISE suggestions:
-
-1. WEATHER: Brief weather info (max 2 sentences - temperature, conditions, key recommendation)
-2. OUTFIT: Brief outfit suggestions (max 2 sentences - key clothing items and materials)
-
-Respond EXACTLY in this format:
-WEATHER: [2-sentence weather info]
-OUTFIT: [2-sentence outfit suggestions]`;
-
-				try {
-					// Call AI to generate weather and outfit
-					const response = await sendChatMessageWithCity(prompt, []);
-					console.log(`[Schedule Auto-Gen ${i}] Response:`, response);
-
-					// Parse weather and outfit from response
-					let weather = "";
-					let outfit = "";
-
-					// Convert response to string (handle both string and object responses)
-					const responseText =
-						typeof response === "string"
-							? response
-							: response?.content || response?.message || "";
-					if (!responseText) {
-						console.warn(`[Schedule Auto-Gen ${i}] Empty response received`);
-						enrichedItems.push(item);
-						continue;
-					}
-
-					const weatherMatch = responseText.match(
-						/WEATHER:\s*(.+?)(?=OUTFIT:|$)/s
-					);
-					const outfitMatch = responseText.match(/OUTFIT:\s*(.+?)$/s);
-					if (weatherMatch) {
-						weather = weatherMatch[1].trim();
-					}
-					if (outfitMatch) {
-						outfit = outfitMatch[1].trim();
-					}
-
-					console.log(
-						`[Schedule Auto-Gen ${i}] Weather: "${weather}", Outfit: "${outfit}"`
-					);
-
-					// Generate outfit image
-					if (outfit) {
-						const imageUrl = await generateOutfitImage(outfit, item.activity);
-						newOutfitImages[i] = imageUrl;
-						console.log(`[Schedule Auto-Gen ${i}] Image URL:`, imageUrl);
-					}
-
-					// Create enriched item with generated data
-					enrichedItems.push({
-						...item,
-						weather: weather || item.weather || "",
-						outfit: outfit || item.outfit || "",
-					});
-				} catch (itemError) {
-					console.error(
-						`[Schedule Auto-Gen ${i}] Error generating data for item:`,
-						itemError
-					);
-					enrichedItems.push(item);
-				}
-			}
-
-			// Set state with enriched items and outfit images
-			console.log("[Schedule Auto-Gen] Enriched items:", enrichedItems);
-			console.log("[Schedule Auto-Gen] Outfit images:", newOutfitImages);
+			// Simply store the schedule items and show the table
 			setScheduleData({
-				items: enrichedItems,
+				items: scheduleItems,
 				title: title || "Daily Schedule",
 			});
-			setOutfitImages(newOutfitImages);
 			setShowScheduleTable(true);
 		} catch (error) {
 			console.error("Error in handleScheduleDetected:", error);
-			// Fallback: show schedule without auto-generated data
+			// Fallback: still show the schedule
 			setScheduleData({
 				items: scheduleItems,
 				title: title || "Daily Schedule",
@@ -348,35 +256,33 @@ OUTFIT: [2-sentence outfit suggestions]`;
 	};
 
 	return (
-		<ThemeProvider>
-			<TemperatureProvider>
+		<TemperatureProvider>
+			<ThemeProvider>
 				<div className="app">
 					{/* Header Section - Improved Glow */}
 					<header className="header">
-						<div className="header-content">
-							<div className="header-text">
-								<h1 className="title glow">
-									<span className="glow-icon">☁️</span> StratusSphere
-								</h1>
-								<p className="subtitle glow-soft">
-									Chasing storms. Perfecting precision. ⚡
-								</p>
-							</div>
-							<div className="header-buttons">
-								<button
-									className="settings-btn"
-									onClick={() => setShowSettings(true)}
-								>
-									⚙️ Settings
-								</button>
-								<button
-									className="about-btn"
-									onClick={() => setShowAbout(true)}
-								>
-									ℹ️ About
-								</button>
-							</div>
+						<button
+							className="about-btn"
+							onClick={() => setShowAbout(true)}
+							title="About"
+						>
+							ℹ️
+						</button>
+						<div className="header-center">
+							<h1 className="title glow">
+								<span className="glow-icon">☁️</span> StratusSphere
+							</h1>
+							<p className="subtitle glow-soft">
+								Chasing storms. Perfecting precision. ⚡
+							</p>
 						</div>
+						<button
+							className="settings-btn"
+							onClick={() => setShowSettings(true)}
+							title="Settings"
+						>
+							⚙️
+						</button>
 					</header>
 
 					{/* AI Search Bar (Compact) */}
@@ -412,79 +318,56 @@ OUTFIT: [2-sentence outfit suggestions]`;
 
 								{showHourlyForecast && (
 									<>
-										{/* Day Selection Tabs - Organized chronologically starting from current day */}
+										{/* Day Selection Tabs - Show all available days with full weekday names */}
 										<div className="day-selector">
-											{weatherData.forecast.forecastday
-												.slice(0, 7)
-												.map((day, idx) => {
-													const dayDate = new Date(day.date);
-													const currentDayIndex = findCurrentDayIndex(
-														weatherData.forecast.forecastday
-													);
-													const dayLabel = getDayLabel(
-														day.date,
-														idx,
-														currentDayIndex
-													);
-													const shortLabel =
-														dayLabel.length > 9
-															? dayLabel.substring(0, 3)
-															: dayLabel;
-
-													// Add context for tooltip (Today, Tomorrow, etc.)
-													const today = new Date();
-													const dayDateObj = new Date(day.date);
-													const diffDays = Math.floor(
-														(dayDateObj - today) / (1000 * 60 * 60 * 24)
-													);
-													let contextLabel = "";
-													if (diffDays === 0) contextLabel = " (Today)";
-													else if (diffDays === 1) contextLabel = " (Tomorrow)";
-													else if (diffDays === -1)
-														contextLabel = " (Yesterday)";
-
-													return (
-														<button
-															key={idx}
-															className={`day-tab ${
-																selectedDay === idx ? "active" : ""
-															}`}
-															onClick={() => setSelectedDay(idx)}
-															title={`${dayDate.toLocaleDateString("en-US", {
-																weekday: "long",
-																month: "short",
-																day: "numeric",
-															})}${contextLabel}`}
-														>
-															{shortLabel}
-														</button>
-													);
-												})}
+											{weatherData.forecast.forecastday.map((day, idx) => {
+												const dayDate = new Date(day.date);
+												const weekday = dayDate.toLocaleDateString("en-US", {
+													weekday: "short",
+												});
+												return (
+													<button
+														key={idx}
+														className={`day-tab ${
+															selectedDay === idx ? "active" : ""
+														}`}
+														onClick={() => setSelectedDay(idx)}
+														title={dayDate.toLocaleDateString("en-US", {
+															weekday: "long",
+															month: "short",
+															day: "numeric",
+														})}
+													>
+														{weekday}
+													</button>
+												);
+											})}
 										</div>
 
-										{/* Hourly Data for Selected Day - Scrollable Chart */}
+										{/* Hourly Data for Selected Day - Line Chart */}
 										{(() => {
-											// Use current day as fallback if selectedDay is null
-											const dayIndex =
-												selectedDay !== null
-													? selectedDay
-													: findCurrentDayIndex(
-															weatherData.forecast.forecastday
-													  );
 											const selectedDayData =
-												weatherData.forecast.forecastday[dayIndex];
+												weatherData.forecast.forecastday[selectedDay];
 											if (!selectedDayData) return null;
 
 											// Always show all 24 hours for the selected day
 											const allHourlyData = selectedDayData.hour || [];
 
 											return (
-												<div className="hourly-chart-container">
+												<>
 													<HourlyLineChart
 														hourlyData={allHourlyData}
-														showAll={true}
+														showAll={showMoreHourly}
 													/>
-												</div>
+													<button
+														className="see-more-btn"
+														onClick={() => setShowMoreHourly(!showMoreHourly)}
+													>
+														{showMoreHourly
+															? "Show Less Detail"
+															: "Show All Hours"}
+													</button>
+												</>
 											);
 										})()}
 									</>
@@ -493,10 +376,23 @@ OUTFIT: [2-sentence outfit suggestions]`;
 						)}
 
 					<footer>
-						<p>Designed with React & Vite⚡by the StormStream Team</p>
+						<p style={{ color: "#B3B7C4", marginTop: "2rem" }}>
+							Designed with React & Vite⚡by the StormStream Team
+						</p>
 					</footer>
 
-					{/* Chat Bubble - Floating overlay */}
+					{showSettings && <Settings onClose={() => setShowSettings(false)} />}
+					{showAbout && <About onClose={handleAboutClose} />}
+					{showScheduleTable && scheduleData && (
+						<ScheduleTable
+							scheduleData={scheduleData}
+							outfitImages={outfitImages}
+							onClose={() => setShowScheduleTable(false)}
+							onSave={handleScheduleSave}
+						/>
+					)}
+
+					{/* Chat Bubble - Draggable and Resizable */}
 					<ChatBubble
 						messages={messages}
 						isLoading={isLoading}
@@ -505,27 +401,9 @@ OUTFIT: [2-sentence outfit suggestions]`;
 						onClose={() => setShowChatBubble(false)}
 						onScheduleDetected={handleScheduleDetected}
 					/>
-
-					{/* About Page Overlay */}
-					{showAbout && (
-						<About onClose={handleAboutClose} isWelcome={!hasVisitedMain} />
-					)}
-
-					{/* Settings Modal */}
-					{showSettings && <Settings onClose={() => setShowSettings(false)} />}
-
-					{/* Schedule Table Overlay */}
-					{showScheduleTable && scheduleData && (
-						<ScheduleTable
-							scheduleData={scheduleData.items}
-							outfitImages={outfitImages}
-							onClose={() => setShowScheduleTable(false)}
-							onSave={handleScheduleSave}
-						/>
-					)}
 				</div>
-			</TemperatureProvider>
-		</ThemeProvider>
+			</ThemeProvider>
+		</TemperatureProvider>
 	);
 }
 

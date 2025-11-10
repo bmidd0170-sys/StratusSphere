@@ -207,12 +207,26 @@ button:disabled {
   margin-left: calc(-50vw + 50%);
   order: -1;
   transition: background 0.3s ease, border-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  gap: 2rem;
 }
 
 [data-theme="light"] .header {
   background: rgba(255, 255, 255, 0.95);
   border-bottom: 2px solid rgba(157, 126, 232, 0.3);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.header-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
 }
 
 .header-content {
@@ -235,6 +249,14 @@ button:disabled {
   gap: 0;
   flex: 1;
   min-width: 250px;
+}
+
+.title {
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
 }
 
 .glow-icon {
@@ -279,7 +301,6 @@ button:disabled {
   display: block;
   text-align: center;
   width: 100%;
-  margin-left: 3rem;
 }
 
 .header-buttons {
@@ -435,6 +456,13 @@ button:disabled {
 .weather-icon-large {
   width: 120px;
   height: 120px;
+  filter: drop-shadow(0 0 30px rgba(100, 200, 255, 0.8));
+}
+
+.weather-emoji {
+  font-size: 6rem;
+  display: inline-block;
+  text-shadow: 0 0 30px rgba(245, 233, 96, 0.6);
   filter: drop-shadow(0 0 30px rgba(100, 200, 255, 0.8));
 }
 
@@ -1996,7 +2024,7 @@ button:disabled {
 .schedule-help {
   color: var(--electric-yellow);
   font-size: 0.95rem;
-  margin: 0;
+  margin-left: 0 0 0rem;
   line-height: 1.7;
   font-weight: 500;
 }
@@ -2114,7 +2142,7 @@ button:disabled {
 .about-subtitle {
   font-size: 1.5rem;
   color: var(--electric-yellow);
-  margin: 0 0 2rem;
+  margin-left: 0 0 2rem;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;

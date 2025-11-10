@@ -7,7 +7,17 @@ function ScheduleTable({
 	onClose,
 	onSave,
 }) {
-	const [schedule, setSchedule] = useState(scheduleData || []);
+	// Handle both array and object formats for scheduleData
+	const initialItems = Array.isArray(scheduleData)
+		? scheduleData
+		: scheduleData?.items || [];
+	const scheduleTitle =
+		typeof scheduleData === "object" && !Array.isArray(scheduleData)
+			? scheduleData?.title || "Daily Schedule"
+			: "Daily Schedule";
+
+	const [schedule, setSchedule] = useState(initialItems);
+	const [title, setTitle] = useState(scheduleTitle);
 	const [isEditing, setIsEditing] = useState(null);
 	const [editValue, setEditValue] = useState("");
 	const [columnOrder, setColumnOrder] = useState([

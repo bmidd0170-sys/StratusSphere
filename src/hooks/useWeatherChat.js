@@ -12,113 +12,146 @@ import React from 'react';
  */
 async function fetchWeatherFromWeatherAPI(city) {
   try {
-    const apiKey = import.meta.env.VITE_WEATHERAPI_KEY;
-    
-    if (!apiKey) {
-      throw new Error(
-        'VITE_WEATHERAPI_KEY is not configured. Please add it to your .env.local file. ' +
-        'Get a free key at https://www.weatherapi.com/'
-      );
+    // Geocode the city to get coordinates
+    const geoResponse = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
+    );
+    const geoData = await geoResponse.json();
+
+    if (!geoData.results || geoData.results.length === 0) {
+      console.warn(`City not found: ${city}`);
+      return null;
     }
 
-    // Call WeatherAPI.com forecast endpoint
-    // days=10 for 10-day forecast, aqi=yes for air quality index
-    const response = await fetch(
-      `https://api.weatherapi.com/v1/forecast.json?` +
-      `key=${apiKey}&` +
-      `q=${encodeURIComponent(city)}&` +
-      `days=10&` +
-      `aqi=yes&` +
-      `alerts=yes`
+    const { latitude, longitude, name, country, admin1 } = geoData.results[0];
+    console.log(`Found: ${name}, ${admin1}, ${country} (${latitude}, ${longitude})`);
+
+    // Fetch real-time weather with comprehensive current conditions and detailed forecast
+    const weatherResponse = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,weather_code,is_day,cloud_cover,pressure_msl,apparent_temperature,precipitation&forecast_days=7&hourly=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,cloud_cover&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=auto&timeformat=iso8601`
     );
 
-    if (!response.ok) {
-      if (response.status === 403) {
-        throw new Error(
-          'WeatherAPI.com API key is invalid. Please verify your VITE_WEATHERAPI_KEY in .env.local'
-        );
-      } else if (response.status === 400) {
-        const errorData = await response.json();
-        throw new Error(`City not found: ${errorData.error?.message || city}`);
-      }
-      throw new Error(`WeatherAPI.com error: ${response.statusText}`);
+    if (!weatherResponse.ok) {
+      console.warn("Open-Meteo API error");
+      return null;
     }
 
-    const weatherData = await response.json();
-    console.log("WeatherAPI.com data received:", weatherData);
+    const weatherData = await weatherResponse.json();
+    console.log("Real-time weather data:", weatherData);
+    console.log("Hourly times sample:", weatherData.hourly.time.slice(0, 5));
+    console.log("Daily times:", weatherData.daily.time);
 
-    // Validate we have the expected data structure
-    if (!weatherData.location || !weatherData.current || !weatherData.forecast) {
-      throw new Error("Invalid weather data structure from WeatherAPI.com");
+    // Validate we have the expected data structure from Open-Meteo
+    if (!weatherData.current || !weatherData.hourly || !weatherData.daily) {
+      throw new Error("Invalid weather data structure from Open-Meteo API");
     }
 
-    console.log(
-      `Processing weather for ${weatherData.location.name}: ` +
-      `Current: ${weatherData.current.temp_c}°C, ` +
-      `Forecast: ${weatherData.forecast.forecastday.length} days`
-    );
+    console.log(`Processing weather data for ${name}: ${weatherData.hourly.time.length} hourly points, ${weatherData.daily.time.length} daily points`);
 
-    // Transform WeatherAPI.com response to our standard format
+    // Helper function to get weather description and emoji from weather code
+    const getWeatherInfo = (weatherCode) => {
+      const weatherMap = {
+        0: { text: "Clear sky", emoji: "☀️" },
+        1: { text: "Mainly clear", emoji: "🌤️" },
+        2: { text: "Partly cloudy", emoji: "⛅" },
+        3: { text: "Overcast", emoji: "☁️" },
+        45: { text: "Foggy", emoji: "🌫️" },
+        48: { text: "Foggy", emoji: "🌫️" },
+        51: { text: "Light drizzle", emoji: "🌦️" },
+        53: { text: "Moderate drizzle", emoji: "🌦️" },
+        55: { text: "Dense drizzle", emoji: "🌧️" },
+        61: { text: "Slight rain", emoji: "🌦️" },
+        63: { text: "Moderate rain", emoji: "🌧️" },
+        65: { text: "Heavy rain", emoji: "⛈️" },
+        71: { text: "Slight snow", emoji: "🌨️" },
+        73: { text: "Moderate snow", emoji: "❄️" },
+        75: { text: "Heavy snow", emoji: "❄️" },
+        80: { text: "Slight rain showers", emoji: "🌦️" },
+        81: { text: "Moderate rain showers", emoji: "🌧️" },
+        82: { text: "Violent rain showers", emoji: "⛈️" },
+        85: { text: "Slight snow showers", emoji: "🌨️" },
+        86: { text: "Heavy snow showers", emoji: "❄️" },
+        95: { text: "Thunderstorm", emoji: "⛈️" },
+        96: { text: "Thunderstorm with hail", emoji: "⛈️" },
+        99: { text: "Thunderstorm with hail", emoji: "⛈️" },
+      };
+      return weatherMap[weatherCode] || { text: "Unknown", emoji: "🌤️" };
+    };
+
     return {
-      location: {
-        name: weatherData.location.name,
-        region: weatherData.location.region,
-        country: weatherData.location.country,
-        latitude: weatherData.location.lat,
-        longitude: weatherData.location.lon,
-        timezone: weatherData.location.tz_id,
-      },
+      location: { name, region: admin1, country, latitude, longitude },
       current: {
-        temp_c: weatherData.current.temp_c,
-        temp_f: weatherData.current.temp_f,
-        humidity: weatherData.current.humidity,
-        wind_kph: weatherData.current.wind_kph,
-        feelslike_c: weatherData.current.feelslike_c,
-        feelslike_f: weatherData.current.feelslike_f,
-        condition: {
-          text: weatherData.current.condition.text,
-          icon: weatherData.current.condition.icon,
-        },
-        aqi: weatherData.current.air_quality ? {
-          us_epa_index: weatherData.current.air_quality['us-epa-index'],
-          gb_defra_index: weatherData.current.air_quality['gb-defra-index'],
-        } : null,
+        temp_c: weatherData.current.temperature_2m,
+        temp_f: Math.round(weatherData.current.temperature_2m * 9/5 + 32),
+        humidity: weatherData.current.relative_humidity_2m,
+        wind_kph: weatherData.current.wind_speed_10m,
+        wind_degree: weatherData.current.wind_direction_10m,
+        feelslike_c: weatherData.current.apparent_temperature,
+        feelslike_f: Math.round(weatherData.current.apparent_temperature * 9/5 + 32),
+        is_day: weatherData.current.is_day,
+        cloud_cover: weatherData.current.cloud_cover,
+        pressure_mb: weatherData.current.pressure_msl,
+        precip_mm: weatherData.current.precipitation,
+        condition: (() => {
+          const info = getWeatherInfo(weatherData.current.weather_code);
+          return {
+            text: info.text,
+            icon: info.emoji,
+            code: weatherData.current.weather_code,
+          };
+        })(),
       },
       forecast: {
-        forecastday: weatherData.forecast.forecastday.map((day, idx) => ({
-          date: day.date,
+        forecastday: weatherData.daily.time.map((date, idx) => ({
+          date: date,
           day: {
-            maxtemp_c: day.day.maxtemp_c,
-            mintemp_c: day.day.mintemp_c,
-            avgtemp_c: day.day.avgtemp_c,
-            avghumidity: day.day.avghumidity,
-            condition: {
-              text: day.day.condition.text,
-              icon: day.day.condition.icon,
-            },
-            daily_chance_of_rain: day.day.daily_chance_of_rain,
-            daily_chance_of_snow: day.day.daily_chance_of_snow,
+            maxtemp_c: weatherData.daily.temperature_2m_max[idx],
+            mintemp_c: weatherData.daily.temperature_2m_min[idx],
+            avgtemp_c: (weatherData.daily.temperature_2m_max[idx] + weatherData.daily.temperature_2m_min[idx]) / 2,
+            avghumidity: 0,
+            precip_mm: weatherData.daily.precipitation_sum[idx],
+            wind_kph_max: weatherData.daily.wind_speed_10m_max[idx],
+            condition: (() => {
+              const info = getWeatherInfo(weatherData.daily.weather_code[idx]);
+              return {
+                text: info.text,
+                icon: info.emoji,
+                code: weatherData.daily.weather_code[idx],
+              };
+            })(),
+            daily_chance_of_rain: 0,
+            daily_chance_of_snow: 0,
           },
           // Hourly data for each day
-          hour: day.hour.map((hour) => ({
-            time: hour.time,
-            temp_c: hour.temp_c,
-            temp_f: hour.temp_f,
-            humidity: hour.humidity,
-            wind_kph: hour.wind_kph,
-            condition: {
-              text: hour.condition.text,
-              icon: hour.condition.icon,
-            },
-            chance_of_rain: hour.chance_of_rain,
-            chance_of_snow: hour.chance_of_snow,
-          })),
+          hour: weatherData.hourly.time
+            .map((time, hourIdx) => {
+              // Check if this hour belongs to this day
+              if (!time.startsWith(date)) return null;
+              
+              return {
+                time: time,
+                temp_c: weatherData.hourly.temperature_2m[hourIdx],
+                temp_f: Math.round(weatherData.hourly.temperature_2m[hourIdx] * 9/5 + 32),
+                humidity: weatherData.hourly.relative_humidity_2m[hourIdx],
+                wind_kph: weatherData.hourly.wind_speed_10m[hourIdx],
+                condition: (() => {
+                  const info = getWeatherInfo(weatherData.hourly.weather_code[hourIdx]);
+                  return {
+                    text: info.text,
+                    icon: info.emoji,
+                    code: weatherData.hourly.weather_code[hourIdx],
+                  };
+                })(),
+                chance_of_rain: 0,
+                chance_of_snow: 0,
+              };
+            })
+            .filter(Boolean),
         })),
       },
-      alerts: weatherData.alerts?.alert || [],
     };
   } catch (error) {
-    console.error("Error fetching weather from WeatherAPI.com:", error);
+    console.error("Error fetching real-time weather:", error);
     return null;
   }
 }
@@ -227,11 +260,9 @@ ${weatherContext ? "\n" + weatherContext : ""}`,
  * Extract city/location name from user message (supports city names and ZIP codes)
  */
 function extractCityName(message) {
+  const msg = message.toLowerCase();
   console.log(`Extracting city from message: "${message}"`);
   
-  // Clean message
-  const msg = message.toLowerCase();
-
   // Common city slang/nicknames mapping to full names
   const citySlangMap = {
     'philly': 'Philadelphia',
@@ -286,10 +317,10 @@ function extractCityName(message) {
   // Common weather-related keywords to avoid
   const weatherKeywords = ['weather', 'climate', 'forecast', 'temperature', 'conditions', 'rain', 'snow', 'hot', 'cold', 'is', 'it', 'what', 'how', 'the', 'today', 'tomorrow', 'now'];
 
-  // Strategy 0: Check for ZIP codes (5 digits)
+  // Strategy 0: Check for 5-digit ZIP codes
   const zipMatch = message.match(/\b(\d{5})\b/);
   if (zipMatch) {
-    console.log(`Detected ZIP code: ${zipMatch[1]}`);
+    console.log(`🔍 Detected ZIP code: ${zipMatch[1]}`);
     return zipMatch[1];
   }
 

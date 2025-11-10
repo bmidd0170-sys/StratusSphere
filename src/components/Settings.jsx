@@ -3,9 +3,8 @@ import { TemperatureContext } from "../context/TemperatureContext";
 import { ThemeContext } from "../context/ThemeContext";
 
 function Settings({ onClose }) {
-	const { temperatureUnit, toggleTemperatureUnit } = useContext(
-		TemperatureContext
-	);
+	const { temperatureUnit, toggleTemperatureUnit } =
+		useContext(TemperatureContext);
 	const { theme, toggleTheme } = useContext(ThemeContext);
 
 	return (
@@ -28,13 +27,17 @@ function Settings({ onClose }) {
 						</div>
 						<div className="temperature-toggle">
 							<button
-								className={`toggle-btn ${temperatureUnit === "F" ? "active" : ""}`}
+								className={`toggle-btn ${
+									temperatureUnit === "F" ? "active" : ""
+								}`}
 								onClick={toggleTemperatureUnit}
 							>
 								°F Fahrenheit
 							</button>
 							<button
-								className={`toggle-btn ${temperatureUnit === "C" ? "active" : ""}`}
+								className={`toggle-btn ${
+									temperatureUnit === "C" ? "active" : ""
+								}`}
 								onClick={toggleTemperatureUnit}
 							>
 								°C Celsius
@@ -42,7 +45,9 @@ function Settings({ onClose }) {
 						</div>
 						<p className="current-unit">
 							Currently displaying in{" "}
-							<strong>{temperatureUnit === "F" ? "Fahrenheit" : "Celsius"}</strong>
+							<strong>
+								{temperatureUnit === "F" ? "Fahrenheit" : "Celsius"}
+							</strong>
 						</p>
 					</div>
 
@@ -68,7 +73,8 @@ function Settings({ onClose }) {
 							</button>
 						</div>
 						<p className="current-unit">
-							Currently using <strong>{theme === "dark" ? "Dark" : "Light"}</strong> mode
+							Currently using{" "}
+							<strong>{theme === "dark" ? "Dark" : "Light"}</strong> mode
 						</p>
 					</div>
 				</div>

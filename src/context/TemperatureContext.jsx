@@ -19,7 +19,9 @@ export const TemperatureProvider = ({ children }) => {
 	};
 
 	return (
-		<TemperatureContext.Provider value={{ temperatureUnit, toggleTemperatureUnit }}>
+		<TemperatureContext.Provider
+			value={{ temperatureUnit, toggleTemperatureUnit }}
+		>
 			{children}
 		</TemperatureContext.Provider>
 	);
