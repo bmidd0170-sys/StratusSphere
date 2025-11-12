@@ -6,7 +6,7 @@ function About({ onClose, isWelcome = false }) {
 			<div className="about-container">
 				<div className="about-header">
 					<h1 className="about-title">
-						<span className="glow-icon">☁️</span> StratusSphere
+						<span className="glow-icon">☁️</span> About StratusSphere
 					</h1>
 					{!isWelcome && (
 						<button className="about-close-btn" onClick={onClose}>
